@@ -1,6 +1,4 @@
-# Naruto Kayou Price Checker
-
-Streamlit app for checking Naruto Kayou card prices via search links, manual CSV, and optional eBay API token.
-
-## Streamlit Cloud
-Set Python version in Advanced settings to Python 3.11 or 3.12. Main file path: app.py
+streamlit==1.51.0
+pandas==2.3.3
+requests==2.32.5
+openpyxl==3.1.5
