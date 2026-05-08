@@ -1,184 +1,357 @@
 from __future__ import annotations
 
-import math
-import os
+import io
 import re
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote_plus
 
 import pandas as pd
 import requests
+import streamlit as st
 
+# =========================================================
+# Naruto Kayou Price Checker - Single file version
+# Fixed for Streamlit Cloud deployment
+# =========================================================
 
-@dataclass
-class PriceSummary:
-    count: int
-    min_price: float | None
-    median_price: float | None
-    avg_price: float | None
-    max_price: float | None
+KAYOU_SETS = [
+    "All / ทุกรุ่น",
+    "Tier 1 Wave 1", "Tier 1 Wave 2", "Tier 1 Wave 3", "Tier 1 Wave 4",
+    "Tier 2 Wave 1", "Tier 2 Wave 2", "Tier 2 Wave 3", "Tier 2 Wave 4",
+    "Tier 3 Wave 1", "Tier 3 Wave 2", "Tier 3 Wave 3", "Tier 3 Wave 4", "Tier 3 Wave 5", "Tier 3 Wave 6",
+    "Tier 4 Wave 1", "Tier 4 Wave 2", "Tier 4 Wave 3", "Tier 4 Wave 4", "Tier 4 Wave 5", "Tier 4 Wave 6", "Tier 4 Wave 7",
+    "Heaven Scroll", "Earth Scroll", "Jin Chapter", "Promo / Event / PR",
+]
 
+KAYOU_RARITIES = [
+    "All", "N", "R", "SR", "SSR", "TR", "HR", "UR", "OR", "AR", "SLR", "ZR", "BP", "SP", "MR", "CR", "XR", "QR", "SE", "PR"
+]
 
-def build_query(series_alias: str, character: str = "", rarity: str = "", card_no: str = "", extra: str = "") -> str:
-    parts = [series_alias or "Naruto Kayou"]
-    for value in [character, rarity, card_no, extra]:
-        value = (value or "").strip()
-        if value:
-            parts.append(value)
-    return " ".join(parts)
+DEFAULT_EXCLUDE_WORDS = "proxy, custom, fan made, digital, png, jpg, damaged, lot, bulk, box, booster, pack, sleeve"
 
+st.set_page_config(
+    page_title="Naruto Kayou Price Checker",
+    page_icon="🌀",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-def ebay_search_url(query: str, sold: bool = False) -> str:
-    params = {"_nkw": query, "_sacat": "0", "LH_PrefLoc": "2"}
-    if sold:
-        params.update({"LH_Sold": "1", "LH_Complete": "1"})
-    return "https://www.ebay.com/sch/i.html?" + urlencode(params)
-
-
-def _extract_price(price_obj: dict[str, Any] | None) -> tuple[float | None, str]:
-    if not price_obj:
-        return None, ""
-    try:
-        return float(price_obj.get("value")), price_obj.get("currency", "")
-    except Exception:
-        return None, price_obj.get("currency", "") if isinstance(price_obj, dict) else ""
-
-
-def fetch_ebay_active_listings(query: str, oauth_token: str, marketplace: str = "EBAY_US", limit: int = 50) -> pd.DataFrame:
-    """Fetch active eBay listings using official Buy Browse API.
-
-    Requires OAuth application token in EBAY_OAUTH_TOKEN or Streamlit secrets.
+st.markdown(
     """
-    if not oauth_token:
-        raise ValueError("ยังไม่ได้ใส่ EBAY_OAUTH_TOKEN")
+    <style>
+    :root{
+        --bg:#f5f8ff;
+        --card:#ffffff;
+        --ink:#101828;
+        --muted:#667085;
+        --line:#dbe5f5;
+        --blue:#2563eb;
+        --blue2:#eff6ff;
+        --shadow:0 12px 30px rgba(16,24,40,.08);
+    }
+    .stApp{background:linear-gradient(180deg,#f7fbff 0%,#eef5ff 100%);color:var(--ink);}
+    section[data-testid="stSidebar"]{
+        background:#ffffff !important;
+        border-right:1px solid var(--line);
+    }
+    section[data-testid="stSidebar"] *{color:#101828 !important;}
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span{font-weight:600;}
+    section[data-testid="stSidebar"] input,
+    section[data-testid="stSidebar"] textarea,
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div{
+        background:#ffffff !important;
+        color:#101828 !important;
+        border:1px solid #cbd5e1 !important;
+        border-radius:12px !important;
+    }
+    section[data-testid="stSidebar"] input::placeholder,
+    section[data-testid="stSidebar"] textarea::placeholder{color:#6b7280 !important;opacity:1 !important;}
+    div[data-testid="stMetric"]{
+        background:#ffffff;border:1px solid var(--line);padding:18px;border-radius:20px;box-shadow:var(--shadow);
+    }
+    .hero{
+        padding:28px 30px;border-radius:28px;margin-bottom:18px;
+        background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 55%,#7c3aed 100%);
+        color:white;box-shadow:0 18px 50px rgba(37,99,235,.23);
+    }
+    .hero h1{font-size:34px;margin:0 0 8px 0;color:white;}
+    .hero p{font-size:16px;color:#e0ecff;margin:0;}
+    .soft-card{
+        background:#ffffff;border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:var(--shadow);
+    }
+    .small-note{color:#667085;font-size:13px;line-height:1.55;}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:700;margin-right:6px;font-size:12px;}
+    .result-card{
+        background:#fff;border:1px solid #e4e7ec;border-radius:20px;padding:14px;margin-bottom:14px;box-shadow:0 8px 22px rgba(16,24,40,.06);
+    }
+    .result-title{font-weight:800;color:#101828;margin-bottom:6px;}
+    .result-meta{font-size:13px;color:#667085;}
+    a{color:#1d4ed8;text-decoration:none;font-weight:700;}
+    .stButton>button, .stDownloadButton>button{
+        border-radius:14px !important;font-weight:800 !important;border:1px solid #bfdbfe !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
+
+def build_query(card_set: str, character: str, rarity: str, card_no: str, extra: str) -> str:
+    parts = ["Naruto Kayou"]
+    if card_set and not card_set.startswith("All"):
+        parts.append(card_set)
+    if character:
+        parts.append(character.strip())
+    if rarity and rarity != "All":
+        parts.append(rarity.strip())
+    if card_no:
+        parts.append(card_no.strip())
+    if extra:
+        parts.append(extra.strip())
+    return " ".join([p for p in parts if p])
+
+
+def ebay_active_url(query: str) -> str:
+    return f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(query)}"
+
+
+def ebay_sold_url(query: str) -> str:
+    return f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(query)}&LH_Sold=1&LH_Complete=1"
+
+
+def point130_url(query: str) -> str:
+    return f"https://130point.com/sales/?search={quote_plus(query)}"
+
+
+def clean_number(value):
+    if pd.isna(value):
+        return None
+    text = str(value)
+    text = re.sub(r"[^0-9.\-]", "", text)
+    try:
+        return float(text)
+    except Exception:
+        return None
+
+
+def normalize_manual_csv(uploaded_file, fx_rate: float) -> pd.DataFrame:
+    df = pd.read_csv(uploaded_file)
+    lower_map = {c.lower().strip(): c for c in df.columns}
+
+    def pick(*names):
+        for name in names:
+            if name.lower() in lower_map:
+                return lower_map[name.lower()]
+        return None
+
+    title_col = pick("title", "name", "card", "item")
+    price_col = pick("price", "sold_price", "usd_price", "price_usd")
+    url_col = pick("url", "link", "item_url")
+    img_col = pick("image_url", "image", "img", "picture")
+
+    out = pd.DataFrame()
+    out["title"] = df[title_col].astype(str) if title_col else "Manual item"
+    out["price_usd"] = df[price_col].apply(clean_number) if price_col else None
+    out["price_thb"] = out["price_usd"] * fx_rate
+    out["item_url"] = df[url_col].astype(str) if url_col else ""
+    out["image_url"] = df[img_col].astype(str) if img_col else ""
+    out["source"] = "Manual CSV"
+    return out.dropna(subset=["price_usd"])
+
+
+def remove_outliers_iqr(df: pd.DataFrame, col: str = "price_thb") -> pd.DataFrame:
+    if df.empty or col not in df or len(df) < 4:
+        return df
+    q1 = df[col].quantile(0.25)
+    q3 = df[col].quantile(0.75)
+    iqr = q3 - q1
+    low = q1 - 1.5 * iqr
+    high = q3 + 1.5 * iqr
+    return df[(df[col] >= low) & (df[col] <= high)]
+
+
+def fetch_ebay_api(query: str, token: str, limit: int, fx_rate: float) -> pd.DataFrame:
+    if not token:
+        return pd.DataFrame()
     endpoint = "https://api.ebay.com/buy/browse/v1/item_summary/search"
-    headers = {
-        "Authorization": f"Bearer {oauth_token}",
-        "X-EBAY-C-MARKETPLACE-ID": marketplace,
-        "Accept": "application/json",
-    }
-    params = {
-        "q": query,
-        "limit": min(max(int(limit), 1), 200),
-        "sort": "price",
-    }
-    response = requests.get(endpoint, headers=headers, params=params, timeout=30)
-    if response.status_code >= 400:
-        raise RuntimeError(f"eBay API error {response.status_code}: {response.text[:500]}")
-    data = response.json()
-    rows: list[dict[str, Any]] = []
-    for item in data.get("itemSummaries", []):
-        price, currency = _extract_price(item.get("price"))
-        shipping, shipping_currency = _extract_price((item.get("shippingOptions") or [{}])[0].get("shippingCost"))
-        total = None
-        if price is not None:
-            total = price + (shipping or 0)
+    headers = {"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"}
+    params = {"q": query, "limit": min(max(int(limit), 1), 200)}
+    res = requests.get(endpoint, headers=headers, params=params, timeout=25)
+    res.raise_for_status()
+    items = res.json().get("itemSummaries", [])
+    rows = []
+    for item in items:
+        price = item.get("price", {}) or {}
+        image = item.get("image", {}) or {}
+        try:
+            usd = float(price.get("value"))
+        except Exception:
+            continue
         rows.append({
-            "source": "eBay Active",
-            "title": item.get("title"),
-            "price": price,
-            "shipping": shipping,
-            "total_price": total,
-            "currency": currency or shipping_currency,
-            "condition": item.get("condition"),
-            "seller": (item.get("seller") or {}).get("username"),
-            "item_url": item.get("itemWebUrl"),
-            "image_url": (item.get("image") or {}).get("imageUrl"),
-            "raw_date": "",
+            "title": item.get("title", ""),
+            "price_usd": usd,
+            "price_thb": usd * fx_rate,
+            "item_url": item.get("itemWebUrl", ""),
+            "image_url": image.get("imageUrl", ""),
+            "source": "eBay Active API",
         })
     return pd.DataFrame(rows)
 
 
-def read_manual_csv(file) -> pd.DataFrame:
-    """Read sold/manual comp CSV.
+def to_excel_bytes(df: pd.DataFrame, summary: pd.DataFrame) -> bytes:
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Price Results")
+        summary.to_excel(writer, index=False, sheet_name="Summary")
+    return buffer.getvalue()
 
-    Required or accepted columns: title, price, currency, source, item_url, sold_date/raw_date, condition.
+
+st.markdown(
     """
-    df = pd.read_csv(file)
-    cols = {c.lower().strip(): c for c in df.columns}
-    if "price" not in cols:
-        raise ValueError("CSV ต้องมี column ชื่อ price")
-    normalized = pd.DataFrame()
-    normalized["source"] = df[cols.get("source", df.columns[0])] if "source" in cols else "Manual CSV"
-    normalized["title"] = df[cols.get("title", df.columns[0])] if "title" in cols else ""
-    normalized["price"] = pd.to_numeric(df[cols["price"]], errors="coerce")
-    normalized["shipping"] = pd.to_numeric(df[cols["shipping"]], errors="coerce") if "shipping" in cols else 0
-    normalized["total_price"] = normalized["price"].fillna(0) + normalized["shipping"].fillna(0)
-    normalized["currency"] = df[cols.get("currency", df.columns[0])] if "currency" in cols else "USD"
-    normalized["condition"] = df[cols.get("condition", df.columns[0])] if "condition" in cols else ""
-    normalized["seller"] = df[cols.get("seller", df.columns[0])] if "seller" in cols else ""
-    normalized["item_url"] = df[cols.get("item_url", df.columns[0])] if "item_url" in cols else ""
-    normalized["image_url"] = df[cols.get("image_url", df.columns[0])] if "image_url" in cols else ""
-    normalized["raw_date"] = df[cols.get("sold_date", cols.get("raw_date", df.columns[0]))] if ("sold_date" in cols or "raw_date" in cols) else ""
-    return normalized
+    <div class="hero">
+      <h1>🌀 Naruto Kayou Price Checker</h1>
+      <p>เช็กราคา / ดูรูปการ์ด / เปิด eBay Sold / Export Excel สำหรับการ์ด Naruto Kayou</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
+with st.sidebar:
+    st.markdown("### 🔎 Search")
+    card_set = st.selectbox("รุ่น / Set", KAYOU_SETS, index=0)
+    character = st.text_input("ชื่อตัวละคร", placeholder="Naruto / Sasuke / Itachi")
+    rarity = st.selectbox("Rarity", KAYOU_RARITIES, index=0)
+    card_no = st.text_input("เลขการ์ด", placeholder="NR-001, AR-12, BP-...")
+    extra = st.text_input("Keyword เพิ่มเติม", placeholder="EN / Chinese / graded")
 
-def clean_market_noise(df: pd.DataFrame, exclude_words: list[str] | None = None) -> pd.DataFrame:
-    if df.empty:
-        return df
-    exclude_words = exclude_words or []
-    output = df.copy()
-    output = output[output["total_price"].notna() & (output["total_price"] > 0)]
-    for word in exclude_words:
-        word = word.strip().lower()
-        if not word:
-            continue
-        output = output[~output["title"].fillna("").str.lower().str.contains(re.escape(word), na=False)]
-    return output.reset_index(drop=True)
-
-
-def convert_to_thb(df: pd.DataFrame, usd_thb: float = 36.5, jpy_thb: float = 0.25, cny_thb: float = 5.05) -> pd.DataFrame:
-    if df.empty:
-        return df
-    rates = {"USD": usd_thb, "US": usd_thb, "JPY": jpy_thb, "CNY": cny_thb, "RMB": cny_thb, "THB": 1.0}
-    out = df.copy()
-    out["currency"] = out["currency"].fillna("USD").astype(str).str.upper()
-    out["rate_to_thb"] = out["currency"].map(rates).fillna(usd_thb)
-    out["total_thb"] = out["total_price"].astype(float) * out["rate_to_thb"]
-    return out
-
-
-def summarize_prices(df: pd.DataFrame, price_col: str = "total_thb") -> PriceSummary:
-    if df.empty or price_col not in df:
-        return PriceSummary(0, None, None, None, None)
-    values = pd.to_numeric(df[price_col], errors="coerce").dropna()
-    if values.empty:
-        return PriceSummary(0, None, None, None, None)
-    return PriceSummary(
-        count=int(values.count()),
-        min_price=float(values.min()),
-        median_price=float(values.median()),
-        avg_price=float(values.mean()),
-        max_price=float(values.max()),
+    st.divider()
+    st.markdown("### 🧾 Data Source")
+    source_mode = st.radio(
+        "แหล่งข้อมูล",
+        ["Search Link Only", "Manual Sold CSV", "eBay Active API"],
+        index=0,
     )
+    max_items = st.slider("จำนวนรายการสูงสุด", 10, 200, 50, step=10)
+    fx_rate = st.number_input("USD → THB", min_value=1.0, max_value=80.0, value=37.0, step=0.25)
+    exclude_words = st.text_area("คำที่ต้องการตัดออก", value=DEFAULT_EXCLUDE_WORDS, height=90)
 
+query = build_query(card_set, character, rarity, card_no, extra)
 
-def remove_outliers_iqr(df: pd.DataFrame, price_col: str = "total_thb") -> pd.DataFrame:
-    if df.empty or len(df) < 5:
-        return df
-    values = pd.to_numeric(df[price_col], errors="coerce")
-    q1, q3 = values.quantile(0.25), values.quantile(0.75)
-    iqr = q3 - q1
-    if iqr == 0 or math.isnan(iqr):
-        return df
-    low, high = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-    return df[(values >= low) & (values <= high)].reset_index(drop=True)
+c1, c2, c3 = st.columns([2, 1, 1])
+with c1:
+    st.markdown('<div class="soft-card">', unsafe_allow_html=True)
+    st.markdown("#### Keyword ที่ใช้ค้นหา")
+    st.code(query or "Naruto Kayou", language="text")
+    st.markdown('<span class="pill">eBay</span><span class="pill">Sold</span><span class="pill">Image Preview</span>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+with c2:
+    st.link_button("เปิด eBay Active", ebay_active_url(query), use_container_width=True)
+    st.link_button("เปิด eBay Sold", ebay_sold_url(query), use_container_width=True)
+with c3:
+    st.link_button("เปิด 130point", point130_url(query), use_container_width=True)
+    st.caption("ใช้ตรวจราคาขายจริงประกอบ")
 
+st.divider()
 
-def export_excel(df: pd.DataFrame, summary: PriceSummary, query: str, output_path: str) -> str:
-    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        meta = pd.DataFrame([
-            {"field": "query", "value": query},
-            {"field": "checked_at", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
-            {"field": "count", "value": summary.count},
-            {"field": "min_thb", "value": summary.min_price},
-            {"field": "median_thb", "value": summary.median_price},
-            {"field": "avg_thb", "value": summary.avg_price},
-            {"field": "max_thb", "value": summary.max_price},
+market_df = pd.DataFrame()
+
+if source_mode == "Search Link Only":
+    st.info("โหมดนี้เปิดลิงก์ค้นหาเท่านั้น ยังไม่ดึงรูป/ราคากลับมาในเว็บ ถ้าต้องการรูปในเว็บ ให้ใช้ eBay Active API หรือ Manual Sold CSV ที่มี column image_url")
+elif source_mode == "Manual Sold CSV":
+    sample = pd.DataFrame([
+        {"title": "Naruto Kayou AR Itachi", "price": 15.5, "url": "https://example.com", "image_url": "https://example.com/image.jpg"},
+        {"title": "Naruto Kayou BP Naruto", "price": 35.0, "url": "https://example.com", "image_url": "https://example.com/image2.jpg"},
+    ])
+    st.download_button(
+        "Download CSV Template",
+        data=sample.to_csv(index=False).encode("utf-8-sig"),
+        file_name="naruto_kayou_sold_price_template.csv",
+        mime="text/csv",
+    )
+    uploaded = st.file_uploader("Upload CSV ราคา Sold", type=["csv"])
+    if uploaded:
+        market_df = normalize_manual_csv(uploaded, fx_rate)
+elif source_mode == "eBay Active API":
+    st.markdown('<div class="soft-card">', unsafe_allow_html=True)
+    st.markdown("#### eBay API Token")
+    token = st.text_input("OAuth Token", type="password", help="ใส่ eBay Browse API OAuth token")
+    run_api = st.button("ดึงข้อมูลจาก eBay API", type="primary")
+    st.markdown("</div>", unsafe_allow_html=True)
+    if run_api:
+        try:
+            with st.spinner("กำลังดึงข้อมูลจาก eBay..."):
+                market_df = fetch_ebay_api(query, token, max_items, fx_rate)
+        except Exception as exc:
+            st.error(f"ดึงข้อมูล eBay API ไม่สำเร็จ: {exc}")
+
+if not market_df.empty:
+    bad_words = [w.strip().lower() for w in exclude_words.split(",") if w.strip()]
+    if bad_words:
+        pattern = "|".join([re.escape(w) for w in bad_words])
+        market_df = market_df[~market_df["title"].str.lower().str.contains(pattern, na=False)]
+    market_df = market_df.head(max_items).copy()
+    clean_df = remove_outliers_iqr(market_df)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("จำนวนรายการ", f"{len(clean_df):,.0f}")
+    m2.metric("ต่ำสุด", f"฿{clean_df['price_thb'].min():,.0f}")
+    m3.metric("Median", f"฿{clean_df['price_thb'].median():,.0f}")
+    m4.metric("สูงสุด", f"฿{clean_df['price_thb'].max():,.0f}")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 รายการราคา", "🖼️ รูปการ์ด", "📊 กราฟ", "📤 Export"])
+
+    with tab1:
+        st.dataframe(clean_df, use_container_width=True, hide_index=True)
+
+    with tab2:
+        cols = st.columns(4)
+        for idx, row in clean_df.reset_index(drop=True).iterrows():
+            with cols[idx % 4]:
+                st.markdown('<div class="result-card">', unsafe_allow_html=True)
+                img = str(row.get("image_url", "") or "")
+                if img.startswith("http"):
+                    st.image(img, use_container_width=True)
+                else:
+                    st.markdown("_ไม่มีรูปภาพ_")
+                st.markdown(f'<div class="result-title">{str(row.get("title", ""))[:80]}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="result-meta">฿{row.get("price_thb", 0):,.0f} | ${row.get("price_usd", 0):,.2f}</div>', unsafe_allow_html=True)
+                url = str(row.get("item_url", "") or "")
+                if url.startswith("http"):
+                    st.link_button("เปิดรายการ", url, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    with tab3:
+        chart_df = clean_df[["title", "price_thb"]].sort_values("price_thb", ascending=False).head(30)
+        st.bar_chart(chart_df.set_index("title"))
+
+    with tab4:
+        summary = pd.DataFrame([
+            {"metric": "query", "value": query},
+            {"metric": "count", "value": len(clean_df)},
+            {"metric": "min_thb", "value": clean_df["price_thb"].min()},
+            {"metric": "median_thb", "value": clean_df["price_thb"].median()},
+            {"metric": "average_thb", "value": clean_df["price_thb"].mean()},
+            {"metric": "max_thb", "value": clean_df["price_thb"].max()},
         ])
-        meta.to_excel(writer, index=False, sheet_name="Summary")
-        df.to_excel(writer, index=False, sheet_name="Listings")
-    return output_path
+        st.download_button(
+            "Download Excel Report",
+            data=to_excel_bytes(clean_df, summary),
+            file_name="naruto_kayou_price_report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+else:
+    st.markdown(
+        """
+        <div class="soft-card">
+        <h3>วิธีใช้งาน</h3>
+        <p class="small-note">
+        1) กรอก Set / ตัวละคร / Rarity / เลขการ์ด แล้วเปิด eBay Sold หรือ 130point เพื่อดูราคาขายจริง<br>
+        2) ถ้าต้องการให้เว็บแสดงรูปในตัวเอง ให้ใช้ Manual Sold CSV ที่มี column <b>image_url</b> หรือใช้ eBay Active API<br>
+        3) Export Excel เพื่อเก็บ Watchlist / ส่งต่อ / เทียบราคาในอนาคต
+        </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

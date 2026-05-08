@@ -1,0 +1,26 @@
+# Naruto Kayou Price Checker
+
+## Run local
+
+```bash
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+## Streamlit Cloud
+
+This version includes `runtime.txt` to force Python 3.11 and avoid Python 3.14 package install issues.
+
+Main file path:
+
+```text
+app.py
+```
+
+## CSV columns
+
+Manual CSV supports:
+
+```text
+title, price, url, image_url
+```
