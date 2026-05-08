@@ -1,71 +1,42 @@
-# Naruto Kayou Price Checker
+from __future__ import annotations
 
-Web app สำหรับเช็คราคาการ์ด Naruto Kayou ทุกรุ่นแบบค้นสด ไม่ Fix ราคาค้างในโปรแกรม
+KAYOU_RARITIES = [
+    "R", "TR", "SR", "SSR", "HR", "TGR", "UR", "AR", "OR", "ZR", "SLR", "PTR", "PU", "CP", "LR",
+    "SP", "MR", "BP", "GP", "SE", "CR", "NR", "XR", "QR", "PR", "Promo", "Other"
+]
 
-## Feature
+# Seed catalog. The app also lets users type any custom set/series.
+# Keep names search-friendly rather than pretending this is an official exhaustive database.
+KAYOU_SETS = [
+    {"series": "All / ไม่ระบุรุ่น", "search_alias": "Naruto Kayou", "note": "ค้นรวมทุกรุ่น"},
+    {"series": "Chinese T1W1", "search_alias": "Naruto Kayou T1W1", "note": "Tier 1 Wave 1"},
+    {"series": "Chinese T1W2", "search_alias": "Naruto Kayou T1W2", "note": "Tier 1 Wave 2"},
+    {"series": "Chinese T1W3", "search_alias": "Naruto Kayou T1W3", "note": "Tier 1 Wave 3"},
+    {"series": "Chinese T1W4", "search_alias": "Naruto Kayou T1W4", "note": "Tier 1 Wave 4"},
+    {"series": "Chinese T1W5", "search_alias": "Naruto Kayou T1W5", "note": "Tier 1 Wave 5"},
+    {"series": "Chinese T2W1", "search_alias": "Naruto Kayou T2W1", "note": "Tier 2 Wave 1"},
+    {"series": "Chinese T2W2", "search_alias": "Naruto Kayou T2W2", "note": "Tier 2 Wave 2"},
+    {"series": "Chinese T2W3", "search_alias": "Naruto Kayou T2W3", "note": "Tier 2 Wave 3"},
+    {"series": "Chinese T2W4", "search_alias": "Naruto Kayou T2W4", "note": "Tier 2 Wave 4"},
+    {"series": "Chinese T2W5", "search_alias": "Naruto Kayou T2W5", "note": "Tier 2 Wave 5"},
+    {"series": "Chinese T2W6", "search_alias": "Naruto Kayou T2W6", "note": "Tier 2 Wave 6"},
+    {"series": "Chinese T2W7", "search_alias": "Naruto Kayou T2W7", "note": "Tier 2 Wave 7"},
+    {"series": "Chinese T2W8 / English Earth Scroll", "search_alias": "Naruto Kayou T2W8 Earth Scroll", "note": "English mapping may vary by seller listing"},
+    {"series": "Chinese T3W1", "search_alias": "Naruto Kayou T3W1", "note": "Tier 3 Wave 1"},
+    {"series": "Chinese T3W2", "search_alias": "Naruto Kayou T3W2", "note": "Tier 3 Wave 2"},
+    {"series": "Chinese T3W3", "search_alias": "Naruto Kayou T3W3", "note": "Tier 3 Wave 3"},
+    {"series": "Chinese T3W4", "search_alias": "Naruto Kayou T3W4", "note": "Tier 3 Wave 4"},
+    {"series": "Chinese T3W5", "search_alias": "Naruto Kayou T3W5", "note": "Tier 3 Wave 5"},
+    {"series": "Chinese T4W1", "search_alias": "Naruto Kayou T4W1", "note": "Tier 4 Wave 1"},
+    {"series": "Chinese T4W2", "search_alias": "Naruto Kayou T4W2", "note": "Tier 4 Wave 2"},
+    {"series": "Chinese T4W3", "search_alias": "Naruto Kayou T4W3", "note": "Tier 4 Wave 3"},
+    {"series": "Chinese T4W4", "search_alias": "Naruto Kayou T4W4", "note": "Tier 4 Wave 4"},
+    {"series": "Chinese T4W5", "search_alias": "Naruto Kayou T4W5", "note": "Tier 4 Wave 5"},
+    {"series": "Chinese T4W6 / English Heaven Scroll", "search_alias": "Naruto Kayou T4W6 Heaven Scroll", "note": "English Series 1 commonly mapped to T4W6"},
+    {"series": "Chinese T4W7 / English Jin Chapter", "search_alias": "Naruto Kayou T4W7 Jin Chapter", "note": "English Series 2 commonly mapped to T4W7"},
+    {"series": "Promo / Event / PR", "search_alias": "Naruto Kayou Promo PR", "note": "โปรโม / งานอีเวนต์"},
+]
 
-- เลือกรุ่น Kayou Chinese Tier/Wave และ English mapping เช่น Heaven Scroll, Earth Scroll, Jin Chapter
-- ค้นด้วยตัวละคร, Rarity, เลขการ์ด, keyword เพิ่มเติม
-- เปิดลิงก์ eBay Active / eBay Sold ได้ทันที
-- ดึง Active Listing ด้วย eBay Browse API ถ้ามี OAuth Token
-- อัปโหลด Sold Price CSV จาก eBay sold / 130point / record เอง แล้วคำนวณราคาไทย
-- ตัดราคาหลุดตลาดด้วย IQR
-- Export Excel Report
-
-## วิธีรันบน Windows
-
-```bat
-cd C:\path\to\naruto_kayou_price_checker
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
-```
-
-ถ้าเครื่องใช้คำสั่ง `py` ได้:
-
-```bat
-py -m pip install -r requirements.txt
-py -m streamlit run app.py
-```
-
-## วิธีรันบน Mac
-
-```bash
-cd /path/to/naruto_kayou_price_checker
-python3 -m pip install -r requirements.txt
-python3 -m streamlit run app.py
-```
-
-## การใช้ eBay API
-
-1. สมัคร eBay Developer Account
-2. สร้าง App แล้วขอ OAuth Application Token สำหรับ Buy Browse API
-3. Copy `.streamlit/secrets.toml.example` เป็น `.streamlit/secrets.toml`
-4. ใส่ Token:
-
-```toml
-EBAY_OAUTH_TOKEN = "your_token"
-```
-
-> หมายเหตุ: eBay Browse API เหมาะกับ Active Listing ส่วน Sold/Completed Listing แนะนำใช้ CSV จาก eBay sold/130point หรือ API ภายนอกที่มีสิทธิ์ถูกต้อง
-
-## CSV Format สำหรับ Sold Price
-
-ขั้นต่ำ:
-
-```csv
-title,price,currency
-Naruto Kayou Jin Chapter Sasuke AR,18,USD
-```
-
-แนะนำ:
-
-```csv
-title,price,shipping,currency,sold_date,condition,item_url,seller
-Naruto Kayou Jin Chapter Sasuke AR,18,3,USD,2026-05-01,Ungraded,https://...,sellername
-```
-
-## หมายเหตุสำคัญ
-
-- ราคาการ์ด Kayou บางใบตลาดเล็กมาก ต้องใช้ Sold Price หลายแหล่งประกอบ
-- Active Listing คือราคาตั้งขาย ไม่ใช่ราคาขายจริง
-- ควรเทียบภาษา Chinese/English, รุ่นกล่อง, rarity, เลขการ์ด, สภาพ และเกรดก่อนสรุปราคา
+DEFAULT_EXCLUDE_WORDS = [
+    "fan art", "proxy", "custom", "digital", "reprint", "sticker", "poster", "booster box", "box only", "empty box"
+]
