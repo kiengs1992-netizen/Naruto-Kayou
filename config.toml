@@ -1,0 +1,3 @@
+# Rename this file to secrets.toml and paste your token.
+# eBay Buy Browse API OAuth Application Token
+EBAY_OAUTH_TOKEN = "paste_your_ebay_oauth_token_here"
