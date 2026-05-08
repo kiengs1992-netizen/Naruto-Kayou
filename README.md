@@ -1,6 +1,6 @@
-import base64
 from io import BytesIO
 from urllib.parse import quote_plus
+import html
 
 import pandas as pd
 import requests
@@ -14,16 +14,24 @@ st.set_page_config(
 )
 
 KAYOU_WAVES = [
-    "T1W1", "T1W2", "T1W3", "T1W4", "T2W1", "T2W2", "T2W3", "T2W4",
-    "T3W1", "T3W2", "T3W3", "T3W4", "T4W1", "T4W2", "T4W3", "T4W4", "T4W5", "T4W6", "T4W7",
+    "T1W1", "T1W2", "T1W3", "T1W4",
+    "T2W1", "T2W2", "T2W3", "T2W4",
+    "T3W1", "T3W2", "T3W3", "T3W4",
+    "T4W1", "T4W2", "T4W3", "T4W4", "T4W5", "T4W6", "T4W7",
     "Jin Chapter", "Heaven Scroll", "Earth Scroll", "Promo / Event / PR", "Other"
 ]
 KAYOU_RARITIES = ["", "R", "SR", "SSR", "UR", "OR", "AR", "BP", "SP", "MR", "CR", "XR", "QR", "NR", "PR", "HR", "SLR", "SE", "CP", "Other"]
 
 CSS = """
 <style>
-    .stApp { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
-    section[data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid #e5e7eb; }
+    .stApp {
+        background: linear-gradient(180deg, #f8fafc 0%, #edf4ff 100%);
+        color: #0f172a;
+    }
+    section[data-testid="stSidebar"] {
+        background: #ffffff !important;
+        border-right: 1px solid #e5e7eb;
+    }
     section[data-testid="stSidebar"] * { color: #0f172a !important; }
     section[data-testid="stSidebar"] input,
     section[data-testid="stSidebar"] textarea,
@@ -33,49 +41,84 @@ CSS = """
         color: #0f172a !important;
         border-color: #cbd5e1 !important;
     }
-    section[data-testid="stSidebar"] input::placeholder { color: #64748b !important; opacity: 1 !important; }
+    section[data-testid="stSidebar"] input::placeholder {
+        color: #64748b !important;
+        opacity: 1 !important;
+    }
     .hero {
-        border-radius: 22px;
+        border-radius: 24px;
         padding: 30px 34px;
         color: white;
         background: linear-gradient(135deg, #2563eb 0%, #7c3aed 55%, #f97316 100%);
-        box-shadow: 0 18px 40px rgba(37, 99, 235, 0.25);
+        box-shadow: 0 20px 44px rgba(37, 99, 235, 0.22);
         margin-bottom: 24px;
     }
-    .hero h1 { font-size: 34px; margin-bottom: 8px; }
-    .hero p { font-size: 16px; opacity: 0.95; margin: 0; }
+    .hero h1 { font-size: 36px; margin: 0 0 10px 0; }
+    .hero p { font-size: 16px; opacity: .95; margin: 0; }
     .info-box {
         padding: 14px 16px;
-        border-radius: 14px;
+        border-radius: 16px;
         background: #dbeafe;
         color: #1e3a8a;
         border: 1px solid #bfdbfe;
         margin-bottom: 18px;
     }
-    .card {
+    .card-wrap {
         background: white;
         border: 1px solid #e2e8f0;
         border-radius: 18px;
         padding: 14px;
-        min-height: 420px;
+        min-height: 448px;
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-        transition: transform .15s ease, box-shadow .15s ease;
+        margin-bottom: 16px;
     }
-    .card:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12); }
     .card-img {
         width: 100%;
-        height: 230px;
+        height: 250px;
         object-fit: contain;
         border-radius: 14px;
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
     }
-    .card-title { font-weight: 700; font-size: 14px; color: #0f172a; margin-top: 10px; min-height: 54px; }
-    .price { font-size: 18px; font-weight: 800; color: #2563eb; }
+    .no-img {
+        width: 100%;
+        height: 250px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        background: #f1f5f9;
+        color: #64748b;
+        border: 1px solid #e2e8f0;
+        font-weight: 700;
+    }
+    .card-title {
+        font-weight: 800;
+        font-size: 14px;
+        color: #0f172a;
+        margin-top: 10px;
+        min-height: 58px;
+        line-height: 1.35;
+    }
+    .price { font-size: 19px; font-weight: 900; color: #2563eb; }
     .price-thb { font-size: 14px; color: #334155; }
     .muted { color: #64748b; font-size: 13px; }
-    .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; font-size:12px; margin-right:4px; }
-    div[data-testid="stMetric"] { background: white; padding: 16px; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 8px 20px rgba(15,23,42,.05); }
+    .pill {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 12px;
+        margin: 3px 4px 8px 0;
+    }
+    div[data-testid="stMetric"] {
+        background: white;
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 8px 20px rgba(15,23,42,.05);
+    }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -83,10 +126,10 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 def build_query(wave: str, character: str, rarity: str, card_no: str, extra: str) -> str:
     parts = ["Naruto Kayou", wave, character, rarity, card_no, extra]
-    return " ".join([p.strip() for p in parts if p and p.strip()])
+    return " ".join([str(p).strip() for p in parts if str(p).strip()])
 
 
-def market_links(query: str):
+def market_links(query: str) -> dict:
     q = quote_plus(query)
     return {
         "eBay Active": f"https://www.ebay.com/sch/i.html?_nkw={q}",
@@ -138,16 +181,18 @@ def normalize_csv(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip().lower() for c in df.columns]
     rename_map = {
-        "name": "title", "card": "title", "url": "item_url", "link": "item_url",
-        "image": "image_url", "img": "image_url", "amount": "price"
+        "name": "title", "card": "title", "card_name": "title",
+        "url": "item_url", "link": "item_url",
+        "image": "image_url", "img": "image_url", "imageurl": "image_url",
+        "amount": "price", "sold_price": "price"
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
-    for col in ["title", "price", "currency", "image_url", "item_url", "condition"]:
+    for col in ["title", "price", "currency", "image_url", "item_url", "condition", "source"]:
         if col not in df.columns:
             df[col] = "" if col != "price" else 0
     df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0)
-    if "source" not in df.columns:
-        df["source"] = "Manual CSV"
+    df["currency"] = df["currency"].replace("", "USD")
+    df["source"] = df["source"].replace("", "Manual CSV")
     return df
 
 
@@ -155,12 +200,16 @@ def clean_df(df: pd.DataFrame, only_with_image: bool, sort_by: str) -> pd.DataFr
     if df.empty:
         return df
     out = df.copy()
-    if only_with_image and "image_url" in out.columns:
+    if "image_url" not in out.columns:
+        out["image_url"] = ""
+    if only_with_image:
         out = out[out["image_url"].astype(str).str.len() > 5]
-    if sort_by == "ราคาต่ำ → สูง":
-        out = out.sort_values("price", ascending=True)
-    elif sort_by == "ราคาสูง → ต่ำ":
-        out = out.sort_values("price", ascending=False)
+    if "price" in out.columns:
+        out["price"] = pd.to_numeric(out["price"], errors="coerce").fillna(0)
+        if sort_by == "ราคาต่ำ → สูง":
+            out = out.sort_values("price", ascending=True)
+        elif sort_by == "ราคาสูง → ต่ำ":
+            out = out.sort_values("price", ascending=False)
     return out.reset_index(drop=True)
 
 
@@ -177,7 +226,8 @@ def show_cards(df: pd.DataFrame, usd_to_thb: float):
             """
             <div class='info-box'>
             ยังไม่มีรูปการ์ดในหน้านี้<br>
-            วิธีให้รูปขึ้น: เลือก <b>eBay Active API</b> แล้วใส่ Bearer Token หรือเลือก <b>Manual Sold CSV</b> ที่มีคอลัมน์ <code>image_url</code>
+            ถ้าต้องการให้รูปขึ้นทันที ให้เลือก <b>Manual Sold CSV</b> แล้วอัปโหลดไฟล์ที่มีคอลัมน์ <code>image_url</code><br>
+            หรือเลือก <b>eBay Active API</b> แล้วใส่ Bearer Token จาก eBay Developer
             </div>
             """,
             unsafe_allow_html=True,
@@ -187,28 +237,28 @@ def show_cards(df: pd.DataFrame, usd_to_thb: float):
     cols = st.columns(4)
     for i, row in df.iterrows():
         with cols[i % 4]:
-            image_url = str(row.get("image_url", "") or "")
-            title = str(row.get("title", "No title") or "No title")
+            image_url = html.escape(str(row.get("image_url", "") or ""), quote=True)
+            title = html.escape(str(row.get("title", "No title") or "No title"))
             price = float(row.get("price", 0) or 0)
-            currency = str(row.get("currency", "") or "")
-            condition = str(row.get("condition", "") or "")
-            source = str(row.get("source", "") or "")
-            item_url = str(row.get("item_url", "") or "")
+            currency = html.escape(str(row.get("currency", "USD") or "USD"))
+            condition = html.escape(str(row.get("condition", "Unknown") or "Unknown"))
+            source = html.escape(str(row.get("source", "") or ""))
+            item_url = html.escape(str(row.get("item_url", "") or ""), quote=True)
+            thb = price * usd_to_thb if currency.upper() == "USD" else price
 
-            img_html = f"<img class='card-img' src='{image_url}' />" if image_url else "<div class='card-img' style='display:flex;align-items:center;justify-content:center;color:#64748b;'>ไม่มีรูป</div>"
+            img_html = f"<img class='card-img' src='{image_url}' />" if image_url else "<div class='no-img'>ไม่มีรูป</div>"
             link_html = f"<a href='{item_url}' target='_blank'>เปิดดูรายการ</a>" if item_url else ""
-            thb = price * usd_to_thb if currency.upper() == "USD" or currency == "" else price
 
             st.markdown(
                 f"""
-                <div class='card'>
+                <div class='card-wrap'>
                     {img_html}
-                    <div class='card-title'>{title[:110]}</div>
-                    <div style='margin:8px 0;'>
-                        <span class='pill'>{condition or 'Unknown'}</span>
+                    <div class='card-title'>{title[:120]}</div>
+                    <div>
+                        <span class='pill'>{condition}</span>
                         <span class='pill'>{source}</span>
                     </div>
-                    <div class='price'>{currency or 'USD'} {price:,.2f}</div>
+                    <div class='price'>{currency} {price:,.2f}</div>
                     <div class='price-thb'>ประมาณ ฿ {thb:,.2f}</div>
                     <div class='muted' style='margin-top:8px;'>{link_html}</div>
                 </div>
@@ -231,7 +281,7 @@ with st.sidebar:
     ebay_token = ""
     uploaded_file = None
     if data_source == "eBay Active API":
-        ebay_token = st.text_input("eBay Bearer Token", type="password", help="ต้องใช้ token จาก eBay Developer")
+        ebay_token = st.text_input("eBay Bearer Token", type="password", help="ใช้ token จาก eBay Developer")
     if data_source == "Manual Sold CSV":
         uploaded_file = st.file_uploader("Upload CSV ที่มี image_url", type=["csv"])
     st.markdown("---")
@@ -242,7 +292,7 @@ st.markdown(
     """
     <div class='hero'>
         <h1>🃏 Naruto Kayou Price Checker</h1>
-        <p>ค้นหาราคา Kayou พร้อมแสดงรูปการ์ดในเว็บ / รองรับ eBay API และ CSV ที่มี image_url</p>
+        <p>ค้นหาราคา Kayou พร้อมแสดงรูปการ์ดในเว็บ รองรับ eBay API และ CSV ที่มี image_url</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -283,7 +333,7 @@ if run_search:
 results = clean_df(st.session_state.get("results", pd.DataFrame()), only_with_image, sort_by)
 
 if not results.empty:
-    prices = pd.to_numeric(results["price"], errors="coerce").dropna()
+    prices = pd.to_numeric(results.get("price", pd.Series(dtype=float)), errors="coerce").dropna()
     m1, m2, m3, m4 = st.columns(4)
     with m1:
         st.metric("จำนวนรายการ", f"{len(results):,}")
@@ -316,4 +366,4 @@ with tab3:
             use_container_width=True,
         )
 
-st.caption("หมายเหตุ: eBay Active API ต้องใช้ Bearer Token จาก eBay Developer ส่วน eBay Sold แบบสดในเว็บนิยมใช้ลิงก์ Sold/130point หรือ CSV ที่บันทึกมาเอง")
+st.caption("หมายเหตุ: eBay Active API ต้องใช้ Bearer Token จาก eBay Developer ส่วน eBay Sold แบบสดแนะนำใช้ลิงก์ Sold/130point หรือ CSV ที่บันทึกมาเอง")
