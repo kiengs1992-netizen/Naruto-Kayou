@@ -1,4 +1,20 @@
-streamlit==1.51.0
-pandas==2.3.3
-requests==2.32.5
-openpyxl==3.1.5
+# Naruto Kayou Price Checker v8 Image Cards
+
+Streamlit web app for checking Naruto Kayou card prices with image card grid.
+
+## Run locally
+
+```bat
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+## Streamlit Cloud
+
+Main file path: `app.py`  
+Python: 3.11
+
+## Important
+
+- Search Link Only only opens market search links and will not show live images.
+- To show images inside the app, use eBay Active API with a Bearer Token, or upload CSV with `image_url`.
